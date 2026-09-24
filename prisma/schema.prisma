@@ -1,0 +1,164 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  projects      Project[]
+  reviews       Review[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  repositories Repository[]
+}
+
+model Repository {
+  id          String   @id @default(cuid())
+  name        String
+  url         String?
+  provider    String   @default("github") // github, gitlab, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  pullRequests PullRequest[]
+}
+
+model PullRequest {
+  id          String   @id @default(cuid())
+  number      Int?
+  title       String
+  url         String?
+  diff        String   @db.Text
+  metadata    Json?    // Store additional PR metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  repositoryId String?
+  repository   Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  
+  reviews     Review[]
+}
+
+model Review {
+  id               String   @id @default(cuid())
+  status           String   @default("pending") // pending, completed, failed
+  riskScore        Float?
+  releaseStatus    String?  // safe, moderate, high, critical
+  analysisType     String   @default("standard") // standard, demo
+  summary          String?  @db.Text
+  topIssues        Json?    // Array of top 3 must-fix issues
+  categoryScores   Json?    // Breakdown by security, bug, performance, maintainability
+  metadata         Json?    // Additional analysis metadata
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  completedAt      DateTime?
+  
+  pullRequestId    String
+  pullRequest      PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  findings         Finding[]
+  generatedTests   GeneratedTest[]
+  riskScores       RiskScore[]
+}
+
+model Finding {
+  id               String   @id @default(cuid())
+  title            String
+  category         String   // security, bug, performance, maintainability, style
+  severity         String   // critical, high, medium, low
+  certainty        String   // certain, likely, suggestion
+  confidence       Float    // 0.0 to 1.0
+  file             String
+  lineStart        Int
+  lineEnd          Int
+  evidence         String   @db.Text
+  explanation      String   @db.Text
+  impact           String?  @db.Text
+  suggestedFix     String?  @db.Text
+  fixPatch         String?  @db.Text
+  blastRadius      Json?    // Impact path visualization data
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  reviewId         String
+  review           Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  
+  generatedTests   GeneratedTest[]
+}
+
+model GeneratedTest {
+  id          String   @id @default(cuid())
+  testCode    String   @db.Text
+  language    String   // javascript, typescript, python, etc.
+  framework   String?  // jest, pytest, etc.
+  reason      String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  reviewId    String
+  review      Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  
+  findingId   String?
+  finding     Finding? @relation(fields: [findingId], references: [id], onDelete: SetNull)
+}
+
+model RiskScore {
+  id                    String   @id @default(cuid())
+  totalScore            Float    // 0-100
+  securityScore         Float
+  bugScore              Float
+  performanceScore      Float
+  maintainabilityScore  Float
+  calculation           Json?    // Formula and weights used
+  createdAt             DateTime @default(now())
+  
+  reviewId              String
+  review                Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+}
+
+model EvaluationResult {
+  id                String   @id @default(cuid())
+  datasetName       String
+  totalIssues       Int
+  detectedIssues    Int
+  truePositives     Int
+  falsePositives    Int
+  falseNegatives    Int
+  precision         Float
+  recall            Float
+  f1Score           Float
+  falsePositiveRate Float
+  metadata          Json?
+  createdAt         DateTime @default(now())
+}
