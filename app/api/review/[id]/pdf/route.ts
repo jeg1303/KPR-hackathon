@@ -218,7 +218,7 @@ export async function GET(
     const filename = `releaseguard-review-${reviewId}-${Date.now()}.pdf`;
 
     // Return PDF with appropriate headers
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as unknown as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

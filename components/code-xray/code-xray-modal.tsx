@@ -37,33 +37,122 @@ export function CodeXRayModal({ isOpen, finding, onClose, fileContent }: CodeXRa
 
   // Generate sample code context around the vulnerable line
   const generateCodeContext = () => {
-    const lines: string[] = [];
-    const startLine = Math.max(1, finding.lineStart - 5);
-    const endLine = finding.lineEnd + 5;
+    // For SQL Injection
+    if (finding.title.includes('SQL Injection') || finding.category === 'security') {
+      return `// UserController.ts
+import { Request, Response } from 'express';
+import { db } from '../database';
 
-    // Generate context lines (in real app, this would come from actual file)
-    for (let i = startLine; i <= endLine; i++) {
-      if (i < finding.lineStart) {
-        lines.push(`  // Context before`);
-      } else if (i >= finding.lineStart && i <= finding.lineEnd) {
-        // The vulnerable line
-        if (finding.title.includes('SQL Injection')) {
-          lines.push(`  const sql = "SELECT * FROM users WHERE name LIKE '%" + query + "%'";`);
-        } else if (finding.title.includes('Hardcoded')) {
-          lines.push(`  const apiKey = 'sk_test_51HqJ4xYqGP0KxYqGP0KxYqGP0KxYqGP0KxYqGP';`);
-        } else if (finding.title.includes('N+1')) {
-          lines.push(`    const category = await fetch(\`/api/categories/\${product.categoryId}\`);`);
-        } else if (finding.title.includes('Null')) {
-          lines.push(`  console.log(\`Account \${account.email} deleted\`);`);
-        } else {
-          lines.push(`  // Vulnerable code line`);
-        }
-      } else {
-        lines.push(`  // Context after`);
-      }
+export class UserController {
+  async searchUsers(req: Request, res: Response) {
+    const { query } = req.query;
+    
+    // ⚠️ VULNERABLE: SQL Injection
+    const sql = "SELECT * FROM users WHERE name LIKE '%" + query + "%'";
+    const users = await db.query(sql);
+    
+    return res.json(users);
+  }
+  
+  async getUserById(req: Request, res: Response) {
+    const { id } = req.params;
+    const user = await db.query('SELECT * FROM users WHERE id = ?', [id]);
+    return res.json(user);
+  }
+}`;
     }
 
-    return lines.join('\n');
+    // For Hardcoded Secrets
+    if (finding.title.includes('Hardcoded') || finding.title.includes('Secret')) {
+      return `// config/payment.ts
+import Stripe from 'stripe';
+
+export class PaymentService {
+  private stripe: Stripe;
+  
+  constructor() {
+    // ⚠️ VULNERABLE: Hardcoded API Key
+    const apiKey = 'sk_test_51HqJ4xYqGP0KxYqGP0KxYqGP0KxYqGP0KxYqGP';
+    this.stripe = new Stripe(apiKey, { apiVersion: '2023-10-16' });
+  }
+  
+  async createCharge(amount: number, currency: string) {
+    return await this.stripe.charges.create({
+      amount,
+      currency,
+      source: 'tok_visa',
+    });
+  }
+}`;
+    }
+
+    // For N+1 Query
+    if (finding.title.includes('N+1') || finding.title.includes('Performance')) {
+      return `// ProductService.ts
+import { Product } from './models/Product';
+
+export class ProductService {
+  async getProductsWithCategories() {
+    const products = await Product.findAll();
+    
+    const enrichedProducts = [];
+    for (const product of products) {
+      // ⚠️ VULNERABLE: N+1 Query Problem
+      const category = await fetch(\`/api/categories/\${product.categoryId}\`);
+      enrichedProducts.push({
+        ...product,
+        category: await category.json()
+      });
+    }
+    
+    return enrichedProducts;
+  }
+}`;
+    }
+
+    // For Null Reference
+    if (finding.title.includes('Null') || finding.title.includes('Reference')) {
+      return `// AccountService.ts
+export class AccountService {
+  async deleteAccount(userId: string) {
+    const account = await this.findAccount(userId);
+    
+    await this.database.delete(account.id);
+    
+    // ⚠️ VULNERABLE: Potential Null Reference
+    console.log(\`Account \${account.email} deleted\`);
+    
+    return { success: true };
+  }
+  
+  private async findAccount(userId: string) {
+    return await this.database.findOne({ userId });
+  }
+}`;
+    }
+
+    // Generic code sample
+    return `// ${finding.file}
+export class SecurityExample {
+  async processData(input: string) {
+    // Context before the issue
+    const validated = this.validate(input);
+    
+    // ⚠️ VULNERABLE CODE
+    ${finding.evidence || 'const result = dangerousOperation(input);'}
+    
+    // Context after the issue
+    return this.formatOutput(result);
+  }
+  
+  private validate(data: string): boolean {
+    return data && data.length > 0;
+  }
+  
+  private formatOutput(data: any): string {
+    return JSON.stringify(data);
+  }
+}`;
   };
 
   const code = generateCodeContext();
@@ -152,43 +241,62 @@ export function CodeXRayModal({ isOpen, finding, onClose, fileContent }: CodeXRa
                 </Button>
               </div>
 
-              <div className="border border-gray-800 rounded-lg overflow-hidden">
+              <div className="border border-gray-800 rounded-lg overflow-hidden" style={{ minHeight: '450px' }}>
                 <Editor
-                  height="400px"
-                  defaultLanguage="javascript"
+                  height="450px"
+                  defaultLanguage="typescript"
                   theme="vs-dark"
                   value={code}
                   options={{
                     readOnly: true,
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,
-                    fontSize: 13,
+                    fontSize: 14,
                     lineNumbers: 'on',
                     glyphMargin: true,
                     folding: false,
                     lineDecorationsWidth: 10,
                     lineNumbersMinChars: 3,
+                    automaticLayout: true,
+                    wordWrap: 'on',
+                    renderLineHighlight: 'all',
                   }}
                   onMount={(editor) => {
-                    // Highlight the vulnerable line
+                    // Find the line with the warning comment
                     const model = editor.getModel();
                     if (model) {
-                      editor.createDecorationsCollection([
-                        {
-                          range: {
-                            startLineNumber: finding.lineStart - Math.max(1, finding.lineStart - 5) + 1,
-                            startColumn: 1,
-                            endLineNumber: finding.lineEnd - Math.max(1, finding.lineStart - 5) + 1,
-                            endColumn: model.getLineMaxColumn(finding.lineStart - Math.max(1, finding.lineStart - 5) + 1),
+                      const content = model.getValue();
+                      const lines = content.split('\n');
+                      const vulnerableLineIndex = lines.findIndex(line => 
+                        line.includes('⚠️ VULNERABLE') || 
+                        line.includes('VULNERABLE:') ||
+                        (finding.evidence && line.includes(finding.evidence.substring(0, 20)))
+                      );
+                      
+                      if (vulnerableLineIndex !== -1) {
+                        const lineNumber = vulnerableLineIndex + 1;
+                        
+                        // Highlight the vulnerable line
+                        editor.createDecorationsCollection([
+                          {
+                            range: {
+                              startLineNumber: lineNumber,
+                              startColumn: 1,
+                              endLineNumber: lineNumber + 1,
+                              endColumn: 1,
+                            },
+                            options: {
+                              isWholeLine: true,
+                              className: 'monaco-highlight-line',
+                              glyphMarginClassName: 'monaco-highlight-glyph',
+                              linesDecorationsClassName: 'monaco-highlight-decoration',
+                            },
                           },
-                          options: {
-                            isWholeLine: true,
-                            className: 'monaco-highlight-line',
-                            glyphMarginClassName: 'monaco-highlight-glyph',
-                            linesDecorationsClassName: 'monaco-highlight-decoration',
-                          },
-                        },
-                      ]);
+                        ]);
+                        
+                        // Scroll to the highlighted line
+                        editor.revealLineInCenter(lineNumber);
+                      }
                     }
                   }}
                 />

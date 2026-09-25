@@ -1,6 +1,9 @@
+'use client';
+
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuth } from '@/lib/auth/auth-context';
 import { 
   Shield, 
   Bug, 
@@ -12,10 +15,14 @@ import {
   GitPullRequest,
   Activity,
   Brain,
-  Target
+  Target,
+  LogOut,
+  User,
 } from 'lucide-react';
 
 export default function LandingPage() {
+  const { isAuthenticated, user, signOut } = useAuth();
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-black">
       {/* Header */}
@@ -34,12 +41,32 @@ export default function LandingPage() {
             <Link href="/architecture" className="text-gray-300 hover:text-white transition">
               How It Works
             </Link>
-            <Link href="/dashboard" className="text-gray-300 hover:text-white transition">
-              Dashboard
-            </Link>
-            <Button asChild>
-              <Link href="/analyze">Get Started</Link>
-            </Button>
+            {isAuthenticated ? (
+              <>
+                <Link href="/dashboard" className="text-gray-300 hover:text-white transition">
+                  Dashboard
+                </Link>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 px-3 py-1 bg-gray-800 rounded-lg">
+                    <User className="h-4 w-4 text-blue-400" />
+                    <span className="text-sm text-gray-300">{user?.name || user?.email}</span>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={signOut}>
+                    <LogOut className="h-4 w-4 mr-1" />
+                    Sign Out
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/signin" className="text-gray-300 hover:text-white transition">
+                  Sign In
+                </Link>
+                <Button asChild>
+                  <Link href="/auth/register">Get Started</Link>
+                </Button>
+              </>
+            )}
           </nav>
         </div>
       </header>
